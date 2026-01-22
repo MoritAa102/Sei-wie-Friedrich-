@@ -1,4 +1,4 @@
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyBF_y3Nnu9vGsHVJFHpw0YD_ctKIglpiX8",
   authDomain: "sei-wie-friedrich.firebaseapp.com",
   databaseURL: "https://sei-wie-friedrich-default-rtdb.europe-west1.firebasedatabase.app",
