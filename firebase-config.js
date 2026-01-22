@@ -5,5 +5,5 @@ const firebaseConfig = {
   projectId: "sei-wie-friedrich",
   storageBucket: "sei-wie-friedrich.firebasestorage.app",
   messagingSenderId: "776136993655",
-  appId: "1:776136993655:web:ede98e18ef56ef463e0f72"
+  appId: "1:776136993655:web:76cf4a8709d6e4103e0f72"
 };
