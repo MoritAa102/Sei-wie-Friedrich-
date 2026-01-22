@@ -7,6 +7,8 @@ window.addEventListener("unhandledrejection", (e) => {
   const el = document.getElementById("startError");
   if (el) el.textContent = "Promise-Fehler: " + (e?.reason?.message || e?.reason || e);
 });
+document.getElementById("startError").textContent = "app.js läuft ✅";
+console.log("app.js läuft ✅");
 import { firebaseConfig } from "./firebase-config.js";
 
 // Firebase CDN imports
