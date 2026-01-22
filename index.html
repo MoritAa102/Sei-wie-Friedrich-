@@ -144,6 +144,30 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <!-- ✅ app.js MUSS als module geladen werden -->
-  <script type="module" src="./app.js"></script>
+<!-- ✅ Leaflet JS (WICHTIG: @ muss drin sein) -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- ✅ app.js Debug-Loader: zeigt dir den echten Import-Fehler im startError -->
+<script type="module">
+  const errEl = document.getElementById("startError");
+  const statusEl = document.getElementById("statusBar");
+
+  function show(msg) {
+    if (errEl) errEl.textContent = msg;
+    console.log(msg);
+  }
+
+  if (statusEl) statusEl.textContent = "App lädt…";
+
+  import("./app.js")
+    .then(() => {
+      if (statusEl) statusEl.textContent = "App geladen ✅";
+    })
+    .catch((e) => {
+      if (statusEl) statusEl.textContent = "Fehler ❌";
+      show("❌ app.js konnte nicht geladen werden:\n" + (e?.message || e));
+      console.error(e);
+    });
+</script>
 </body>
 </html>
