@@ -4,20 +4,23 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Sei wie Friedrich — Multiplayer</title>
+
+  <!-- ✅ CSS (Datei MUSS styles.css heißen) -->
   <link rel="stylesheet" href="./styles.css" />
 
-  <!-- Leaflet (Karte) -->
+  <!-- ✅ Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
+
 <body>
   <header class="topbar">
     <div class="brand">👑 Sei wie Friedrich — Multiplayer</div>
-    <div id="statusBar" class="status"></div>
+    <div id="statusBar" class="status">Lade…</div>
   </header>
 
   <main class="container">
 
-    <!-- START -->
+    <!-- ✅ START -->
     <section id="view-start" class="view">
       <h1>Start</h1>
       <p class="muted">Name eingeben, Raum erstellen oder beitreten.</p>
@@ -28,7 +31,8 @@
       </label>
 
       <div class="row">
-        <button id="btnCreate" class="btn primary">Raum erstellen</button>
+        <!-- ✅ ID muss exakt btnCreate heißen -->
+        <button id="btnCreate" class="btn primary" type="button">Raum erstellen</button>
       </div>
 
       <div class="divider"></div>
@@ -37,14 +41,17 @@
         <span>Raumcode</span>
         <input id="roomInput" type="text" maxlength="6" placeholder="z.B. A7K2Q9" />
       </label>
+
       <div class="row">
-        <button id="btnJoin" class="btn">Raum beitreten</button>
+        <!-- ✅ ID muss exakt btnJoin heißen -->
+        <button id="btnJoin" class="btn" type="button">Raum beitreten</button>
       </div>
 
+      <!-- ✅ Hier schreibt der Debug-/Fehlertext rein -->
       <p id="startError" class="error"></p>
     </section>
 
-    <!-- LOBBY -->
+    <!-- ✅ LOBBY -->
     <section id="view-lobby" class="view hidden">
       <div class="lobbyHead">
         <h1>Lobby</h1>
@@ -52,7 +59,7 @@
         <div class="roomCodeBox">
           <div class="roomCodeLabel">Code</div>
           <div class="roomCodeValue" id="roomCodeText">------</div>
-          <button id="btnCopyCode" class="btn tiny">Kopieren</button>
+          <button id="btnCopyCode" class="btn tiny" type="button">Kopieren</button>
         </div>
       </div>
 
@@ -64,37 +71,35 @@
       </div>
 
       <div class="row">
-        <button id="btnStartGame" class="btn primary hidden">Spiel starten</button>
+        <button id="btnStartGame" class="btn primary hidden" type="button">Spiel starten</button>
       </div>
 
       <p id="lobbyHint" class="muted"></p>
     </section>
 
-    <!-- QUESTION -->
+    <!-- ✅ QUESTION -->
     <section id="view-question" class="view hidden">
       <h1 id="qTitle">Frage</h1>
       <p id="qPrompt" class="muted"></p>
 
-      <!-- Map question -->
       <div id="mapWrap" class="hidden">
         <div id="map"></div>
         <p class="muted small">Klicke auf die Karte, um die Pinnnadel zu setzen.</p>
       </div>
 
-      <!-- Options question -->
       <div id="optionsWrap" class="hidden">
         <div id="options" class="options"></div>
       </div>
 
       <div class="row">
-        <button id="btnSubmit" class="btn primary">Abgeben</button>
+        <button id="btnSubmit" class="btn primary" type="button">Abgeben</button>
       </div>
 
       <p id="qError" class="error"></p>
       <p id="qWaiting" class="muted"></p>
     </section>
 
-    <!-- FEEDBACK -->
+    <!-- ✅ FEEDBACK -->
     <section id="view-feedback" class="view hidden">
       <h1>Auswertung</h1>
 
@@ -114,11 +119,11 @@
       </div>
 
       <div class="row">
-        <button id="btnNext" class="btn primary">Weiter</button>
+        <button id="btnNext" class="btn primary" type="button">Weiter</button>
       </div>
     </section>
 
-    <!-- RESULTS -->
+    <!-- ✅ RESULTS -->
     <section id="view-results" class="view hidden">
       <h1>Ergebnis</h1>
       <p class="muted">Alle sehen jetzt die gleiche Rangliste.</p>
@@ -129,14 +134,16 @@
       </div>
 
       <div class="row">
-        <button id="btnRestart" class="btn">Zurück zum Start</button>
+        <button id="btnRestart" class="btn" type="button">Zurück zum Start</button>
       </div>
     </section>
 
   </main>
 
+  <!-- ✅ Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- ✅ app.js MUSS als module geladen werden -->
   <script type="module" src="./app.js"></script>
 </body>
 </html>
-<script type="module" src="./app.js"></script>
