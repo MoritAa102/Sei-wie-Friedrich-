@@ -7,7 +7,6 @@
   --primary:#5aa1ff;
   --danger:#ff6b6b;
 }
-
 *{box-sizing:border-box}
 body{
   margin:0;
@@ -15,8 +14,6 @@ body{
   background: radial-gradient(1200px 800px at 20% -10%, #142044, var(--bg));
   color:var(--text);
 }
-a{color:inherit}
-
 .topbar{
   position:sticky; top:0;
   display:flex; justify-content:space-between; align-items:center;
@@ -27,21 +24,13 @@ a{color:inherit}
 }
 .brand{font-weight:700}
 .status{color:var(--muted); font-size:14px}
-
-.container{
-  max-width:900px;
-  margin:0 auto;
-  padding:18px;
-}
-
+.container{max-width:900px; margin:0 auto; padding:18px}
 .view{padding:10px 0}
 .hidden{display:none}
-
 h1{margin:8px 0 10px 0; font-size:28px}
 .muted{color:var(--muted)}
 .small{font-size:13px}
 .error{color:var(--danger); margin-top:10px; white-space:pre-wrap}
-
 .field{display:flex; flex-direction:column; gap:8px; margin:14px 0}
 .field input{
   padding:12px 12px;
@@ -52,7 +41,6 @@ h1{margin:8px 0 10px 0; font-size:28px}
   outline:none;
 }
 .field input:focus{border-color: rgba(90,161,255,.6)}
-
 .row{display:flex; gap:10px; margin-top:10px; flex-wrap:wrap}
 .btn{
   border:1px solid rgba(255,255,255,.14);
@@ -69,9 +57,7 @@ h1{margin:8px 0 10px 0; font-size:28px}
   border-color: rgba(90,161,255,.55);
 }
 .btn.tiny{padding:8px 10px; border-radius:12px; font-size:13px}
-
 .divider{height:1px; background:rgba(255,255,255,.08); margin:18px 0}
-
 .card{
   background: rgba(255,255,255,.03);
   border: 1px solid rgba(255,255,255,.08);
@@ -80,7 +66,6 @@ h1{margin:8px 0 10px 0; font-size:28px}
   margin-top:14px;
 }
 .cardTitle{font-weight:750; margin-bottom:10px}
-
 .list{list-style:none; padding:0; margin:0}
 .list li{
   display:flex; justify-content:space-between; align-items:center;
@@ -95,10 +80,7 @@ h1{margin:8px 0 10px 0; font-size:28px}
   border:1px solid rgba(255,255,255,.12);
   color:var(--muted);
 }
-
-.lobbyHead{
-  display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap;
-}
+.lobbyHead{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap}
 .roomCodeBox{
   display:flex; align-items:center; gap:10px;
   background: rgba(255,255,255,.03);
@@ -107,19 +89,8 @@ h1{margin:8px 0 10px 0; font-size:28px}
   padding:10px 12px;
 }
 .roomCodeLabel{color:var(--muted); font-size:13px}
-.roomCodeValue{
-  font-weight:900;
-  letter-spacing:2px;
-  font-size:18px;
-  padding:2px 6px;
-}
-
-.options{
-  display:grid;
-  grid-template-columns: 1fr;
-  gap:10px;
-  margin-top:14px;
-}
+.roomCodeValue{font-weight:900; letter-spacing:2px; font-size:18px; padding:2px 6px}
+.options{display:grid; grid-template-columns: 1fr; gap:10px; margin-top:14px}
 .opt{
   display:flex; align-items:center; gap:10px;
   padding:12px 12px;
@@ -131,7 +102,6 @@ h1{margin:8px 0 10px 0; font-size:28px}
 .opt:hover{border-color: rgba(255,255,255,.25)}
 .opt input{transform: scale(1.2)}
 .opt span{font-weight:650}
-
 #map{
   height: 440px;
   border-radius:18px;
@@ -139,11 +109,7 @@ h1{margin:8px 0 10px 0; font-size:28px}
   overflow:hidden;
   margin-top:12px;
 }
-
-.scoreRow{
-  display:flex; gap:18px; align-items:center; flex-wrap:wrap;
-  margin-top:14px;
-}
+.scoreRow{display:flex; gap:18px; align-items:center; flex-wrap:wrap; margin-top:14px}
 .ring{
   width:160px; height:160px;
   border-radius:999px;
