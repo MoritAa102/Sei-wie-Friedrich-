@@ -1,3 +1,12 @@
+window.addEventListener("error", (e) => {
+  const el = document.getElementById("startError");
+  if (el) el.textContent = "JS-Fehler: " + (e?.message || e);
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  const el = document.getElementById("startError");
+  if (el) el.textContent = "Promise-Fehler: " + (e?.reason?.message || e?.reason || e);
+});
 import { firebaseConfig } from "./firebase-config.js";
 
 // Firebase CDN imports
