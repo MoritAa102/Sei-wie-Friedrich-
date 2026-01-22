@@ -1,0 +1,817 @@
+import { firebaseConfig } from "./firebase-config.js";
+
+// Firebase CDN imports
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  serverTimestamp,
+  onSnapshot,
+  writeBatch,
+  increment,
+} from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged,
+} from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
+
+/** -----------------------------
+ *  Spiel-Definition (Fragen)
+ *  ----------------------------- */
+const QUESTIONS = [
+  {
+    type: "map",
+    title: "Karte",
+    prompt:
+      "Wähle, wo du starten möchtest als Friedrich II: Setze die Pinnnadel möglichst nah an seinen Geburtsort.",
+    max: 10,
+  },
+  {
+    type: "single",
+    title: "Geburtszeit",
+    prompt: "In welchem Jahrhundert möchtest du geboren werden?",
+    options: ["15. Jahrhundert", "16. Jahrhundert", "18. Jahrhundert", "20. Jahrhundert"],
+    correct: "18. Jahrhundert",
+    pointsCorrect: 10,
+    pointsWrong: 1,
+    wrongMsg: "Trostpreis.",
+  },
+  {
+    type: "single",
+    title: "Beruf",
+    prompt: "Wähle deinen Beruf.",
+    options: ["Papst", "König", "Admiral", "Bürgermeister"],
+    correct: "König",
+    pointsCorrect: 10,
+    pointsWrong: 3,
+    wrongMsg: "Trostpreis.",
+  },
+  {
+    type: "multi",
+    title: "Hobbys",
+    prompt: "Wähle deine Hobbys. Du darfst mehrere anklicken und dann bestätigen.",
+    options: ["Fahrradfahren", "Flöte spielen", "Krieg führen", "Karten lesen"],
+    correctSet: new Set(["Flöte spielen", "Krieg führen"]),
+    wrongPenaltyEach: 3,
+    pointsPerCorrect: 10,
+    max: 20,
+  },
+  {
+    type: "single",
+    title: "Spitzname",
+    prompt: "Du hast nun einige Kriege gewonnen — gib dir einen Spitznamen.",
+    options: [
+      "Friedrich der Große",
+      "Friedrich der Kriegsführer",
+      "Der Unbesiegbare",
+      "Friedrich der zweite Gott",
+    ],
+    correct: "Friedrich der Große",
+    pointsCorrect: 10,
+    pointsWrong: 3,
+    wrongMsg: "Trostpreis.",
+  },
+  {
+    type: "multiFinal",
+    title: "Finale",
+    prompt:
+      "Finale Frage, bist du Friedrich oder nicht?\nWas bin ich alles gewesen?",
+    options: [
+      "Reformer",
+      "Profisportler",
+      "Kartoffelliebhaber",
+      "Bogenschütze",
+      "Herrscher von Europa",
+      "Militärstratege",
+    ],
+    correctSet: new Set(["Reformer", "Kartoffelliebhaber", "Militärstratege"]),
+    max: 40,
+    penaltyPerMissing: 13,
+  },
+];
+
+/** -----------------------------
+ *  Firebase init
+ *  ----------------------------- */
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+/** -----------------------------
+ *  DOM helpers
+ *  ----------------------------- */
+const $ = (id) => document.getElementById(id);
+const views = {
+  start: $("view-start"),
+  lobby: $("view-lobby"),
+  question: $("view-question"),
+  feedback: $("view-feedback"),
+  results: $("view-results"),
+};
+
+function showView(name) {
+  Object.values(views).forEach((v) => v.classList.add("hidden"));
+  views[name].classList.remove("hidden");
+}
+
+/** -----------------------------
+ *  State
+ *  ----------------------------- */
+const state = {
+  uid: null,
+  name: null,
+  roomId: null,
+  isHost: false,
+  roomUnsub: null,
+  playersUnsub: null,
+  submissionsUnsub: null,
+  map: null,
+  mapMarker: null,
+  mapPick: null, // {lat,lng}
+  currentRoom: null,
+  players: [],
+};
+
+/** -----------------------------
+ *  UI refs
+ *  ----------------------------- */
+const statusBar = $("statusBar");
+const startError = $("startError");
+const lobbyHint = $("lobbyHint");
+const playersList = $("playersList");
+const roomCodeText = $("roomCodeText");
+const btnStartGame = $("btnStartGame");
+
+const qTitle = $("qTitle");
+const qPrompt = $("qPrompt");
+const qError = $("qError");
+const qWaiting = $("qWaiting");
+
+const mapWrap = $("mapWrap");
+const optionsWrap = $("optionsWrap");
+const optionsDiv = $("options");
+const btnSubmit = $("btnSubmit");
+
+const scoreRing = $("scoreRing");
+const ringValue = $("ringValue");
+const ringSmall = $("ringSmall");
+const deltaText = $("deltaText");
+const deltaMsg = $("deltaMsg");
+const waitingNext = $("waitingNext");
+
+/** -----------------------------
+ *  Auth
+ *  ----------------------------- */
+await signInAnonymously(auth);
+
+onAuthStateChanged(auth, (user) => {
+  if (!user) return;
+  state.uid = user.uid;
+  statusBar.textContent = "Verbunden ✅";
+});
+
+/** -----------------------------
+ *  Utility
+ *  ----------------------------- */
+function normCode(s) {
+  return (s || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+}
+function makeRoomCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 6; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
+}
+
+function setStatus() {
+  const parts = [];
+  if (state.name) parts.push(`Name: ${state.name}`);
+  if (state.roomId) parts.push(`Raum: ${state.roomId}`);
+  if (state.isHost) parts.push("Host");
+  statusBar.textContent = parts.join(" • ") || "Verbunden ✅";
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  }[c]));
+}
+
+/** -----------------------------
+ *  Scoring
+ *  ----------------------------- */
+
+// Friedrich II Geburtsort (vereinfachte Koordinate): Berlin
+const BERLIN = { lat: 52.52, lng: 13.405 };
+
+// sehr grobe "Preußen"-Zone als Box
+const PRUSSIA_BOX = {
+  minLat: 50.8,
+  maxLat: 55.8,
+  minLng: 10.5,
+  maxLng: 22.8,
+};
+
+function inPrussiaBox(lat, lng) {
+  return lat >= PRUSSIA_BOX.minLat && lat <= PRUSSIA_BOX.maxLat &&
+         lng >= PRUSSIA_BOX.minLng && lng <= PRUSSIA_BOX.maxLng;
+}
+
+function haversineKm(a, b) {
+  const R = 6371;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const lat1 = a.lat * Math.PI / 180;
+  const lat2 = b.lat * Math.PI / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+function scoreMapPick(pick) {
+  const dist = haversineKm(BERLIN, pick);
+
+  // 10% quasi direkt
+  if (dist <= 20) return { points: 10, msg: "Treffer! Fast genau Berlin." };
+  if (dist <= 100) return { points: 9, msg: "Sehr nah dran." };
+
+  if (inPrussiaBox(pick.lat, pick.lng)) {
+    return { points: 8, msg: "In Preußen — solide!" };
+  }
+
+  // außerhalb: linear falloff 7% bei 100km -> 0% bei 2000km
+  const d = Math.min(dist, 2000);
+  const p = Math.max(0, Math.round(7 * (1 - (d - 100) / 1900)));
+  return {
+    points: p,
+    msg: p > 0 ? "Außerhalb Preußens — je weiter, desto weniger." : "Zu weit weg 😅",
+  };
+}
+
+function scoreQuestion(qIndex, answer) {
+  const q = QUESTIONS[qIndex];
+
+  if (q.type === "map") return scoreMapPick(answer);
+
+  if (q.type === "single") {
+    const ok = answer === q.correct;
+    return {
+      points: ok ? q.pointsCorrect : q.pointsWrong,
+      msg: ok ? "Richtig!" : (q.wrongMsg || "Trostpreis."),
+    };
+  }
+
+  if (q.type === "multi") {
+    const selected = new Set(answer || []);
+    let points = 0;
+
+    for (const opt of selected) {
+      if (q.correctSet.has(opt)) points += q.pointsPerCorrect;
+      else points -= q.wrongPenaltyEach;
+    }
+
+    points = Math.max(0, Math.min(q.max, points));
+    let msg = "Auswertung gespeichert.";
+    if (points === q.max) msg = "Perfekt!";
+    else if (points > 0) msg = "Teilweise richtig.";
+    else msg = "Leider nichts getroffen.";
+
+    return { points, msg };
+  }
+
+  if (q.type === "multiFinal") {
+    const selected = new Set(answer || []);
+    const correct = q.correctSet;
+    let hit = 0;
+    for (const opt of selected) if (correct.has(opt)) hit++;
+
+    // nur falsch angekreuzt -> 0
+    if (hit === 0) return { points: 0, msg: "Nur falsch angekreuzt → 0%." };
+
+    const missing = 3 - hit;
+    const points = Math.max(0, q.max - missing * q.penaltyPerMissing);
+
+    let msg = "Finale ausgewertet.";
+    if (points === q.max) msg = "Du bist wirklich Friedrich.";
+    else msg = `Fast! Dir fehlen ${missing} richtige Auswahl(en).`;
+
+    return { points, msg };
+  }
+
+  return { points: 0, msg: "" };
+}
+
+/** -----------------------------
+ *  Firestore paths
+ *  ----------------------------- */
+const roomRef = () => doc(db, "rooms", state.roomId);
+const playersCol = () => collection(db, "rooms", state.roomId, "players");
+const submissionsCol = () => collection(db, "rooms", state.roomId, "submissions");
+const myPlayerRef = () => doc(db, "rooms", state.roomId, "players", state.uid);
+const mySubmissionRef = (qIndex) =>
+  doc(db, "rooms", state.roomId, "submissions", `${qIndex}_${state.uid}`);
+
+/** -----------------------------
+ *  Create / Join
+ *  ----------------------------- */
+$("btnCreate").addEventListener("click", async () => {
+  startError.textContent = "";
+  const name = $("nameInput").value.trim();
+  if (!name) return (startError.textContent = "Bitte Name eingeben.");
+
+  state.name = name;
+  const code = makeRoomCode();
+  state.roomId = code;
+
+  await setDoc(roomRef(), {
+    hostId: state.uid,
+    phase: "lobby", // lobby | question | feedback | results
+    qIndex: -1,
+    scoredUpTo: -1,
+    createdAt: serverTimestamp(),
+  });
+
+  await setDoc(myPlayerRef(), {
+    name,
+    joinedAt: serverTimestamp(),
+    totalScore: 0,
+    lastDelta: 0,
+    lastMsg: "",
+    readyNext: false,
+  });
+
+  await enterRoom();
+});
+
+$("btnJoin").addEventListener("click", async () => {
+  startError.textContent = "";
+  const name = $("nameInput").value.trim();
+  if (!name) return (startError.textContent = "Bitte Name eingeben.");
+
+  const code = normCode($("roomInput").value);
+  if (code.length !== 6) return (startError.textContent = "Bitte 6-stelligen Raumcode eingeben.");
+
+  state.name = name;
+  state.roomId = code;
+
+  const snap = await getDoc(roomRef());
+  if (!snap.exists()) return (startError.textContent = "Raum nicht gefunden. Tippfehler?");
+
+  await setDoc(
+    myPlayerRef(),
+    {
+      name,
+      joinedAt: serverTimestamp(),
+      totalScore: 0,
+      lastDelta: 0,
+      lastMsg: "",
+      readyNext: false,
+    },
+    { merge: true }
+  );
+
+  await enterRoom();
+});
+
+async function enterRoom() {
+  setStatus();
+  roomCodeText.textContent = state.roomId;
+  showView("lobby");
+
+  state.roomUnsub?.();
+  state.playersUnsub?.();
+  state.submissionsUnsub?.();
+
+  // room listener
+  state.roomUnsub = onSnapshot(roomRef(), (snap) => {
+    if (!snap.exists()) return;
+    state.currentRoom = snap.data();
+    state.isHost = state.currentRoom.hostId === state.uid;
+    setStatus();
+    renderByRoomState();
+  });
+
+  // players listener
+  state.playersUnsub = onSnapshot(playersCol(), (snap) => {
+    state.players = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderPlayers();
+    renderLobbyControls();
+    rerenderIfNeeded();
+  });
+
+  renderLobbyControls();
+}
+
+function renderPlayers() {
+  playersList.innerHTML = "";
+  const sorted = [...state.players].sort(
+    (a, b) => (a.joinedAt?.seconds || 0) - (b.joinedAt?.seconds || 0)
+  );
+
+  for (const p of sorted) {
+    const li = document.createElement("li");
+    const isHost = state.currentRoom?.hostId === p.id;
+    li.innerHTML = `
+      <div>${escapeHtml(p.name || "???")}</div>
+      <div class="badge">${isHost ? "Host" : "Spieler"}</div>
+    `;
+    playersList.appendChild(li);
+  }
+}
+
+function renderLobbyControls() {
+  if (!state.currentRoom) return;
+  btnStartGame.classList.toggle("hidden", !state.isHost || state.currentRoom.phase !== "lobby");
+  lobbyHint.textContent = state.isHost
+    ? "Du bist Host. Wenn alle da sind: Spiel starten."
+    : "Warte auf den Host…";
+}
+
+$("btnCopyCode").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(state.roomId);
+    lobbyHint.textContent = "Code kopiert ✅";
+    setTimeout(renderLobbyControls, 1200);
+  } catch {
+    lobbyHint.textContent = "Kopieren nicht möglich (Browser).";
+  }
+});
+
+$("btnStartGame").addEventListener("click", async () => {
+  if (!state.isHost) return;
+  await startQuestion(0);
+});
+
+/** -----------------------------
+ *  Host steuert Progress
+ *  ----------------------------- */
+async function startQuestion(qIndex) {
+  const batch = writeBatch(db);
+
+  // readyNext reset
+  for (const p of state.players) {
+    batch.update(doc(db, "rooms", state.roomId, "players", p.id), { readyNext: false });
+  }
+
+  batch.update(roomRef(), {
+    phase: "question",
+    qIndex,
+    questionStartedAt: serverTimestamp(),
+  });
+
+  await batch.commit();
+}
+
+async function goToFeedbackIfReady() {
+  if (!state.isHost) return;
+  const room = state.currentRoom;
+  if (!room || room.phase !== "question") return;
+
+  const qIndex = room.qIndex;
+  if (room.scoredUpTo >= qIndex) return;
+
+  state.submissionsUnsub?.();
+
+  state.submissionsUnsub = onSnapshot(submissionsCol(), async (snap) => {
+    const docs = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((x) => x.qIndex === qIndex);
+
+    const playerCount = state.players.length;
+    const submittedUids = new Set(docs.map((d) => d.uid));
+    if (submittedUids.size < playerCount) return;
+
+    // double-check
+    const roomSnap = await getDoc(roomRef());
+    const fresh = roomSnap.data();
+    if (fresh.scoredUpTo >= qIndex) return;
+
+    const batch = writeBatch(db);
+
+    for (const p of state.players) {
+      const sub = docs.find((d) => d.uid === p.id);
+      const scored = scoreQuestion(qIndex, sub?.answer);
+
+      batch.update(doc(db, "rooms", state.roomId, "players", p.id), {
+        totalScore: increment(scored.points),
+        lastDelta: scored.points,
+        lastMsg: scored.msg || "",
+      });
+    }
+
+    batch.update(roomRef(), {
+      phase: "feedback",
+      scoredUpTo: qIndex,
+    });
+
+    await batch.commit();
+  });
+}
+
+async function goNextIfAllReady() {
+  if (!state.isHost) return;
+  const room = state.currentRoom;
+  if (!room || room.phase !== "feedback") return;
+
+  const allReady =
+    state.players.length > 0 && state.players.every((p) => p.readyNext === true);
+  if (!allReady) return;
+
+  const nextIndex = room.qIndex + 1;
+
+  if (nextIndex >= QUESTIONS.length) {
+    const batch = writeBatch(db);
+
+    for (const p of state.players) {
+      batch.update(doc(db, "rooms", state.roomId, "players", p.id), { readyNext: false });
+    }
+
+    batch.update(roomRef(), { phase: "results" });
+    await batch.commit();
+    return;
+  }
+
+  await startQuestion(nextIndex);
+}
+
+/** -----------------------------
+ *  Render by room state
+ *  ----------------------------- */
+function renderByRoomState() {
+  const room = state.currentRoom;
+  if (!room) return;
+
+  if (room.phase === "lobby") {
+    showView("lobby");
+    return;
+  }
+
+  if (room.phase === "question") {
+    showView("question");
+    renderQuestion(room.qIndex);
+    goToFeedbackIfReady();
+    return;
+  }
+
+  if (room.phase === "feedback") {
+    showView("feedback");
+    renderFeedback();
+    goNextIfAllReady();
+    return;
+  }
+
+  if (room.phase === "results") {
+    showView("results");
+    renderResults();
+    return;
+  }
+}
+
+function rerenderIfNeeded() {
+  if (!state.currentRoom) return;
+  if (state.currentRoom.phase === "feedback") renderFeedback();
+  if (state.currentRoom.phase === "results") renderResults();
+}
+
+/** -----------------------------
+ *  Question UI
+ *  ----------------------------- */
+function renderQuestion(qIndex) {
+  const q = QUESTIONS[qIndex];
+  qTitle.textContent = `${qIndex + 1}/${QUESTIONS.length} — ${q.title}`;
+  qPrompt.textContent = q.prompt;
+  qError.textContent = "";
+  qWaiting.textContent = "";
+
+  btnSubmit.disabled = false;
+  btnSubmit.textContent = "Abgeben";
+
+  // already submitted?
+  onSnapshot(mySubmissionRef(qIndex), (snap) => {
+    if (snap.exists()) {
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = "Abgegeben ✅";
+      qWaiting.textContent = "Warte auf die anderen…";
+    }
+  });
+
+  state.mapPick = null;
+
+  if (q.type === "map") {
+    optionsWrap.classList.add("hidden");
+    mapWrap.classList.remove("hidden");
+    initMapOnce();
+    resetMapMarker();
+  } else {
+    mapWrap.classList.add("hidden");
+    optionsWrap.classList.remove("hidden");
+    renderOptions(q);
+  }
+}
+
+function renderOptions(q) {
+  optionsDiv.innerHTML = "";
+  const isMulti = q.type === "multi" || q.type === "multiFinal";
+
+  for (const opt of q.options) {
+    const row = document.createElement("label");
+    row.className = "opt";
+    row.innerHTML = `
+      <input type="${isMulti ? "checkbox" : "radio"}" name="qopt" value="${escapeHtml(opt)}">
+      <span>${escapeHtml(opt)}</span>
+    `;
+    optionsDiv.appendChild(row);
+  }
+}
+
+btnSubmit.addEventListener("click", async () => {
+  const room = state.currentRoom;
+  if (!room || room.phase !== "question") return;
+
+  const qIndex = room.qIndex;
+  const q = QUESTIONS[qIndex];
+
+  try {
+    let answer = null;
+
+    if (q.type === "map") {
+      if (!state.mapPick) {
+        qError.textContent = "Bitte setze eine Pinnnadel auf der Karte.";
+        return;
+      }
+      answer = { ...state.mapPick };
+    } else {
+      const inputs = Array.from(optionsDiv.querySelectorAll("input"));
+
+      if (q.type === "single") {
+        const chosen = inputs.find((i) => i.checked);
+        if (!chosen) {
+          qError.textContent = "Bitte wähle eine Option.";
+          return;
+        }
+        answer = chosen.value;
+      } else {
+        answer = inputs.filter((i) => i.checked).map((i) => i.value);
+      }
+    }
+
+    await setDoc(
+      mySubmissionRef(qIndex),
+      { uid: state.uid, qIndex, answer, submittedAt: serverTimestamp() },
+      { merge: true }
+    );
+
+    qError.textContent = "";
+    qWaiting.textContent = "Abgegeben. Warte auf die anderen…";
+    btnSubmit.disabled = true;
+    btnSubmit.textContent = "Abgegeben ✅";
+  } catch (e) {
+    qError.textContent = "Fehler beim Absenden: " + (e?.message || e);
+  }
+});
+
+/** -----------------------------
+ *  Map (Leaflet)
+ *  ----------------------------- */
+function initMapOnce() {
+  if (state.map) return;
+
+  state.map = L.map("map", { worldCopyJump: true }).setView([52.2, 13.4], 4);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 9,
+    attribution: "&copy; OpenStreetMap",
+  }).addTo(state.map);
+
+  state.map.on("click", (e) => {
+    state.mapPick = { lat: e.latlng.lat, lng: e.latlng.lng };
+    if (state.mapMarker) state.map.removeLayer(state.mapMarker);
+    state.mapMarker = L.marker(e.latlng).addTo(state.map);
+  });
+
+  // mini label "Europa 1980"
+  const hint = L.control({ position: "topright" });
+  hint.onAdd = () => {
+    const div = L.DomUtil.create("div", "badge");
+    div.style.background = "rgba(7,10,18,.6)";
+    div.style.backdropFilter = "blur(6px)";
+    div.style.padding = "6px 10px";
+    div.style.borderRadius = "999px";
+    div.style.margin = "10px";
+    div.textContent = "Europa (ca. 1980)";
+    return div;
+  };
+  hint.addTo(state.map);
+
+  setTimeout(() => state.map.invalidateSize(), 200);
+}
+
+function resetMapMarker() {
+  if (!state.map) return;
+  if (state.mapMarker) {
+    state.map.removeLayer(state.mapMarker);
+    state.mapMarker = null;
+  }
+  state.mapPick = null;
+  setTimeout(() => state.map.invalidateSize(), 200);
+}
+
+/** -----------------------------
+ *  Feedback
+ *  ----------------------------- */
+function setRing(total) {
+  const clamped = Math.max(0, Math.min(100, Math.round(total)));
+  ringValue.textContent = `${clamped}%`;
+  ringSmall.textContent = "Gesamt";
+  const deg = (clamped / 100) * 360;
+  scoreRing.style.background = `conic-gradient(var(--primary) ${deg}deg, rgba(255,255,255,.08) 0deg)`;
+}
+
+function renderFeedback() {
+  const me = state.players.find((p) => p.id === state.uid) || {};
+  const total = me.totalScore ?? 0;
+  const delta = me.lastDelta ?? 0;
+  const msg = me.lastMsg ?? "";
+
+  setRing(total);
+  deltaText.textContent = (delta >= 0 ? `+${delta}%` : `${delta}%`);
+  deltaMsg.textContent = msg;
+
+  const ready = me.readyNext === true;
+  $("btnNext").disabled = ready;
+  $("btnNext").textContent = ready ? "Warten…" : "Weiter";
+
+  const notReady = state.players.filter((p) => !p.readyNext).length;
+  waitingNext.textContent =
+    notReady > 0 ? `Noch ${notReady} Spieler drücken "Weiter"…` : "Alle bereit.";
+
+  if (state.isHost) goNextIfAllReady();
+}
+
+$("btnNext").addEventListener("click", async () => {
+  try {
+    await updateDoc(myPlayerRef(), { readyNext: true });
+  } catch (e) {
+    deltaMsg.textContent = "Fehler bei Weiter: " + (e?.message || e);
+  }
+});
+
+/** -----------------------------
+ *  Results
+ *  ----------------------------- */
+function rankSaying(rank, totalPlayers) {
+  if (rank === 1) return "Du bist HIMM.";
+  if (rank === totalPlayers) return "Weißt du überhaupt, wer Friedrich ist?";
+  const sayings = [
+    "Stabil – aber da geht noch was.",
+    "Nicht schlecht, Soldat.",
+    "Du bist auf dem richtigen Weg.",
+    "Solide Runde.",
+    "Fast königlich.",
+  ];
+  return sayings[(rank - 2) % sayings.length];
+}
+
+function renderResults() {
+  const board = $("leaderboard");
+  const sorted = [...state.players].sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0));
+  board.innerHTML = "";
+
+  sorted.forEach((p, idx) => {
+    const rank = idx + 1;
+    const row = document.createElement("div");
+    row.className = "rowItem";
+    row.innerHTML = `
+      <div class="rankLeft">
+        <div class="rankTop">
+          <div class="rankNum">#${rank}</div>
+          <div class="rankName">${escapeHtml(p.name || "???")}</div>
+        </div>
+        <div class="rankSay">${escapeHtml(rankSaying(rank, sorted.length))}</div>
+      </div>
+      <div class="rankScore">${Math.round(p.totalScore ?? 0)}%</div>
+    `;
+    board.appendChild(row);
+  });
+}
+
+$("btnRestart").addEventListener("click", () => location.reload());
+
+/** -----------------------------
+ *  Host auto-check loop
+ *  ----------------------------- */
+setInterval(() => {
+  if (!state.currentRoom) return;
+  if (state.isHost && state.currentRoom.phase === "question") goToFeedbackIfReady();
+  if (state.isHost && state.currentRoom.phase === "feedback") goNextIfAllReady();
+}, 800);
