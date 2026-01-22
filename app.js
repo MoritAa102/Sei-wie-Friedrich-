@@ -154,8 +154,8 @@ function haversineKm(a,b){
 }
 function scoreMapPick(pick){
   const dist=haversineKm(BERLIN,pick);
-  if(dist<=20) return {points:10,msg:"Treffer! Fast genau Berlin."};
-  if(dist<=100) return {points:9,msg:"Sehr nah dran."};
+  if(dist<=50) return {points:10,msg:"Treffer! Fast genau Berlin."};
+  if(dist<=150) return {points:9,msg:"Sehr nah dran."};
   if(inPrussiaBox(pick.lat,pick.lng)) return {points:8,msg:"In Preußen — solide!"};
   const d=Math.min(dist,2000);
   const p=Math.max(0,Math.round(7*(1-(d-100)/1900)));
